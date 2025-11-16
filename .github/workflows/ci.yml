@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+
+      - name: Install codegen tools
+        run: |
+          go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
+          go install github.com/vektra/mockery/v2@latest
+
+      - name: Generate code (oapi + mocks)
+        run: |
+          make generate-oapi
+          make generate-repo-mocks
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          args: ./...
+
+      - name: Run unit tests
+        run: make test-unit
+
+      - name: Run repo integration tests
+        run: make test-repo
+
+      - name: Run e2e tests
+        run: make test-e2e

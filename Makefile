@@ -4,9 +4,17 @@
 	docker-up docker-down docker-down-hard docker-logs docker-rebuild \
 	test-repo test-unit test-e2e test-load e2e
 
-ENV_FILE  := .env
+ENV_FILE := .env
 
-GENERATED_OAPI_DIR=internal/api
+HAS_OLD_COMPOSE := $(shell command -v docker-compose >/dev/null 2>&1 && echo 1 || echo 0)
+
+ifeq ($(HAS_OLD_COMPOSE),1)
+	DC := docker-compose
+else
+	DC := docker compose
+endif
+
+GENERATED_OAPI_DIR := internal/api
 OAPI_PKG := github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 
 generate-oapi:
@@ -28,40 +36,40 @@ generate-repo-mocks:
 
 init: generate-oapi generate-repo-mocks
 
-run: generate-oapi docker-up
+run: docker-up
 
 docker-up:
-	docker compose up --build
+	$(DC) up --build
 
 docker-down:
-	docker compose down
+	$(DC) down
 
 docker-down-hard:
-	docker compose down -v
+	$(DC) down -v
 
 docker-rebuild:
-	docker compose build --no-cache
+	$(DC) build --no-cache
 
 docker-logs:
-	docker compose logs -f app
+	$(DC) logs -f app
 
 test-repo:
-	docker compose up -d db
-		MIGRATIONS_DIR="$(PWD)/migrations" \
-		go test -p 1 ./internal/repo/postgres/test/...
+	$(DC) up -d db
+	MIGRATIONS_DIR="$(PWD)/migrations" \
+	go test -p 1 ./internal/repo/postgres/test/...
 
 test-unit:
 	@go test ./internal/...
 
 test-e2e:
 	@set -e; \
-	docker compose -f docker-compose.e2e.yml up -d --build app; \
+	$(DC) -f docker-compose.e2e.yml up -d --build app; \
 	status=0; \
 	go test ./e2e -v -count=1 || status=$$?; \
-	docker compose -f docker-compose.e2e.yml down  -v; \
+	$(DC) -f docker-compose.e2e.yml down -v; \
 	exit $$status
 
 # k6 required
 test-load:
-	docker compose up -d
+	$(DC) up -d
 	k6 run k6/main.js
